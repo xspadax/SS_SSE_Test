@@ -1,0 +1,140 @@
+﻿@{
+    Layout = null;
+}
+
+<!DOCTYPE html>
+
+<html>
+<head>
+    <meta name="viewport" content="width=device-width" />
+    <title>Index</title>
+
+    <link rel="stylesheet" type="text/css" href="~/Content/bootstrap.css">
+    <script src="~/Scripts/jquery-2.1.1.js"></script>
+    <script src="~/Scripts/bootstrap.js"></script>
+    <script src="~/Scripts/jquery.validate.js"></script>
+    <script type="text/javascript" src="~/Scripts/ss-utils.js"></script>
+
+</head>
+<body>
+    <div id="main" class="container-fluid">
+        <div class="row">
+            <div class="col-md-6">
+                <p>Msg</p>
+                <input type="text" id ="MsgData" />
+                <p>Selector</p>
+                <input type="text" id ="SelectorData" />
+                <a href="#" class="btn" id="send">Send</a>
+            </div>
+            <div class="col-md-6">
+                <p>Echo</p><a href="#" id="cleanEcho">clr</a>
+                <div id="result"></div>
+            </div>
+        </div>
+        <div class="row">
+            <div class="col-md-6" id="chat"></div>
+            <div class="col-md-6" id="tv"></div>
+        </div>
+    </div>
+
+
+    <script type="text/javascript">
+        var usersMap = {}, activeSub = null;
+
+
+        $(document).ready(function () {
+
+            $('#send').on('click', send);
+            $('#cleanEcho').on('click', cleanEcho);
+
+            
+
+            
+        });
+       
+        var source = new EventSource('/api/event-stream?channel=default-channel&t=' + new Date().getTime());
+        function refreshUsers() {
+            $.getJSON("/api/event-subscribers?channel=default-channel", function (users) {
+                console.log(users);
+                usersMap = {};
+                $.map(users, function (user) { usersMap[user.userId] = user; });
+                //$("#users").html($.map(usersMap, function (user) { return createUser(user); }).join(''));
+            });
+        }
+        source.addEventListener('error', function (e) {
+            console.log("ERROR!", e);
+        }, false);
+
+        $.ss.eventReceivers = { "document": document };
+
+        $(source).handleServerEvents({
+            handlers: {
+                onConnect: function (u) {
+                    console.log('onConnect ' + u);
+                    activeSub = u;
+                    globalActiveSub = u;
+                    refreshUsers()
+                },
+                onJoin: refreshUsers,
+                onLeave: refreshUsers,
+                chat: function (m, e) {
+                    console.log('chat ' + m);
+                    $('#chat').html(m);
+                },
+                echo: function (m, e) {
+                    console.log('echo ' + m);
+                }
+            },
+            receivers: {
+                tv: {
+                    watch: function (id) {
+                        console.log('tv.watch ' + id);
+                        $('#tv').html('<iframe width="640" height="360" src="//www.youtube.com/embed/' + id.echoMessage + '?autoplay=1" frameborder="0" allowfullscreen></iframe>');
+                    },
+                    off: function () {
+                        console.log('tv.off');
+                        $('#tv').html('');
+                    }
+                }
+            }
+        });
+        $(document).bindHandlers({
+            announce: function (msg) {
+                console.log(msg);
+            },
+            toggle: function () {
+                $(this).toggle();
+            },
+            sendCommand: function () {
+
+            },
+            privateMsg: function () {
+
+            },
+            removeReceiver: function (name) {
+                delete $.ss.eventReceivers[name];
+            },
+            addReceiver: function (name) {
+                $.ss.eventReceivers[name] = window[name];
+            },
+            toggleExamples: function () {
+
+            }
+        }).on('customEvent', function (e, msg, msgEvent) {
+
+        });
+        function send() {
+            $.post("/api/SSETest/default-channel/chat", { from: activeSub.id, toUserId: null, message: $('#MsgData').val(), selector: $('#SelectorData').val() },
+                function () {  })
+                .fail(onError);
+        }
+        function cleanEcho() {
+            $('#result').html('');
+        }
+        var onError = function (e) {
+            if (e.responseJSON && e.responseJSON.responseStatus)
+                $.ss.handlers["announce"](e.responseJSON.responseStatus.message);
+        };
+    </script>
+</body>
+</html>
